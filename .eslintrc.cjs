@@ -25,6 +25,9 @@ module.exports = {
   ],
   settings: {
     'import/resolver': {
+      node: {
+        extensions: ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'],
+      },
       typescript: {
         alwaysTryTypes: true,
         project: './tsconfig.json',
@@ -100,7 +103,7 @@ module.exports = {
     ],
 
     // General best practices
-    'no-console': 'warn',
+    'no-console': 'off',
     'no-debugger': 'error',
     'no-alert': 'error',
     'no-var': 'error',
