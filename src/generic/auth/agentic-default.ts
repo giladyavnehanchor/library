@@ -1,4 +1,7 @@
-import anchorBrowser from 'anchorbrowser';
+import AnchorBrowser, { type Anchorbrowser } from 'anchorbrowser';
+import { z } from 'zod';
+
+import type { Browser } from 'playwright';
 
 const RUN_AGENTIC_VALIDATION_PROMPT = `Use a 3-way result so "invalid credentials" is separated from "could not attempt".
 
@@ -16,52 +19,59 @@ Rules:
 - If you performed a submit action and there is no clear success signal AND no clear credentials error, return "attempt_failed".
 `;
 
-// Lazy-loaded config and client - only initialized when needed
-let _anchorClient: InstanceType<typeof anchorBrowser> | null = null;
-let _config: {
-  sessionId: string;
-  identityId: string;
-} | null = null;
+const ConfigSchema = z.object({
+  sessionId: z.string().min(1, 'ANCHOR_SESSION_ID is required'),
+  identityId: z.string().min(1, 'ANCHOR_IDENTITY_ID is required'),
+});
 
-function getConfig() {
-  if (!_config) {
-    _config = {
-      sessionId: process.env.ANCHOR_SESSION_ID!,
-      identityId: process.env.ANCHOR_IDENTITY_ID!,
-    };
-  }
-  return _config;
+type Config = z.infer<typeof ConfigSchema>;
+
+interface LoginResult {
+  success: boolean;
+  message: string;
 }
 
-function getAnchorClient() {
-  if (!_anchorClient) {
-    _anchorClient = new anchorBrowser();
-  }
-  return _anchorClient;
+function getConfig(): Config {
+  return ConfigSchema.parse({
+    sessionId: process.env['ANCHOR_SESSION_ID'],
+    identityId: process.env['ANCHOR_IDENTITY_ID'],
+  });
 }
 
-async function setupBrowser() {
-  const config = getConfig();
+function getAnchorClient(): Anchorbrowser {
+  return new AnchorBrowser();
+}
+
+async function setupBrowser(config: Config): Promise<Browser> {
   const client = getAnchorClient();
+
   console.log(`[BROWSER] Connecting to existing session: ${config.sessionId}`);
-  return await client.browser.connect(config.sessionId);
+
+  return client.browser.connect(config.sessionId);
 }
 
-export default async function loginWithAgent() {
+export default async function loginWithAgent(): Promise<LoginResult> {
   try {
-    const client = getAnchorClient();
     const config = getConfig();
+    const client = getAnchorClient();
 
     const credentials = await client.identities.retrieveCredentials(config.identityId);
 
-    await setupBrowser();
+    await setupBrowser(config);
 
-    await client.agent.task(RUN_AGENTIC_VALIDATION_PROMPT, { sessionId: config.sessionId, taskOptions: { url: `https://${credentials.source}` } });
+    await client.agent.task(RUN_AGENTIC_VALIDATION_PROMPT, {
+      sessionId: config.sessionId,
+      taskOptions: { url: `https://${credentials.source}` },
+    });
 
     console.log('Placeholder for agent-based login implementation');
+
     return { success: true, message: 'Agent-based login placeholder' };
-  } catch (error) {
-    console.error('Error in agent-based login:', error);
-    return { success: false, message: 'Agent-based login failed' };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    console.error('Error in agent-based login:', errorMessage);
+
+    return { success: false, message: errorMessage || 'Agent-based login failed' };
   }
 }
